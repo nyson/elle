@@ -3,14 +3,20 @@ module Elle.Parser where
 
 import Elle.LogicExp
 import Data.Text (Text, pack, unpack)
-import Text.Megaparsec
+import           Text.Megaparsec (Parsec(..), between, try, parse)
+import           Control.Applicative.Alternative ((<|>), many, some)
 import qualified Text.Megaparsec.Expr as E
 import qualified Text.Megaparsec.Char as C
 import qualified Text.Megaparsec.Char.Lexer as L
-import Data.Void
+import Data.Void (Void)
 import Data.Monoid ((<>))
 
 type Parser = Parsec Void Text
+
+runParser :: Text -> Either Text LE
+runParser t = case parse logicalExpressionParser "" t of
+  Left err -> Left . pack $ show err
+  Right a  -> Right a
 
 spaceEater :: Parser ()
 spaceEater = L.space C.space1 lineComment blockComment
@@ -27,7 +33,7 @@ parens :: Parser a -> Parser a
 parens = between (symbol "(") (symbol ")")
 
 reservedWords :: [Text]
-reservedWords = ["bottom"]
+reservedWords = ["bottom", "F"]
 
 identifier :: Parser Text
 identifier = (lexeme . try) (p >>= check)
@@ -35,6 +41,7 @@ identifier = (lexeme . try) (p >>= check)
         check x | x `elem` reservedWords = fail ("'" <> unpack x <> "' is a reserved word!")
                 | otherwise = return x
 
+-- List of operators
 operators :: [[E.Operator Parser LE]]
 operators
   = [ [ E.InfixL $ Implies <$ symbol "->"
@@ -45,6 +52,7 @@ operators
       , E.InfixL $ Or <$ symbol "∨"]
     ]
 
+-- | Parses successive unary negations
 negateParser :: Parser LE
 negateParser = foldr1 (.) <$> some singleNot >>= (<$> leTerm)
   where singleNot = try $ symbol "!" <|> symbol "¬" >> return Not
